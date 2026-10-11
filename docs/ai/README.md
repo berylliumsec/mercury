@@ -48,7 +48,7 @@ Render a patch into an existing policy:
 
 ```bash
 cargo run -p mercury-policy-patch -- render \
-  --policy policy.nebula.yaml \
+  --policy policy.example.yaml \
   --patch docs/ai/example-policy-patch.json \
   --output /tmp/policy.rendered.yaml
 ```
@@ -57,7 +57,7 @@ Create a missing profile while rendering:
 
 ```bash
 cargo run -p mercury-policy-patch -- render \
-  --policy policy.nebula.yaml \
+  --policy policy.example.yaml \
   --patch docs/ai/example-policy-patch.json \
   --output /tmp/policy.rendered.yaml \
   --create-profile

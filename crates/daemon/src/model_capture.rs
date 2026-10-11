@@ -1819,7 +1819,7 @@ mod tests {
             "model": "gpt-5",
             "stream": true,
             "messages": [
-                {"role": "system", "content": "You are Nebula. token sk-proj-AAAAAAAAAAAAAAAAAAAAAAAA"},
+                {"role": "system", "content": "You are an example agent. token sk-proj-AAAAAAAAAAAAAAAAAAAAAAAA"},
                 {"role": "user", "content": [{"type": "text", "text": "scan the host"}]}
             ],
             "tools": [{"type": "function", "function": {"name": "run_nmap"}}]

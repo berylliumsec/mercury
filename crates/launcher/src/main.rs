@@ -714,17 +714,17 @@ mod tests {
     #[cfg(unix)]
     #[test]
     fn args_default_profile_when_omitted() {
-        let args = Args::try_parse_from(["mercury-run", "nebula"]).expect("parse args");
+        let args = Args::try_parse_from(["mercury-run", "example-agent"]).expect("parse args");
         assert_eq!(args.profile, "default");
-        assert_eq!(args.command, vec!["nebula".to_string()]);
+        assert_eq!(args.command, vec!["example-agent".to_string()]);
     }
 
     #[test]
     fn args_accept_explicit_profile_override() {
-        let args = Args::try_parse_from(["mercury-run", "--profile", "sandbox", "nebula"])
+        let args = Args::try_parse_from(["mercury-run", "--profile", "sandbox", "example-agent"])
             .expect("parse args");
         assert_eq!(args.profile, "sandbox");
-        assert_eq!(args.command, vec!["nebula".to_string()]);
+        assert_eq!(args.command, vec!["example-agent".to_string()]);
     }
 
     #[test]
