@@ -1,0 +1,38 @@
+{
+  "schema_version": "mercury-policy-patch/v1",
+  "needs_clarification": false,
+  "questions": [],
+  "assumptions": [
+    "The agent only needs read access to project docs and HTTPS GET access to the GitHub API."
+  ],
+  "target_profile": "default",
+  "policy_patch": {
+    "file_allow": {
+      "action": "append",
+      "items": [
+        {
+          "pattern": "/workspace/docs/**"
+        }
+      ]
+    },
+    "exec_allow": {
+      "action": "append",
+      "items": [
+        {
+          "path": "/usr/bin/git"
+        }
+      ]
+    },
+    "url_allow": {
+      "action": "append",
+      "items": [
+        {
+          "scheme": "https",
+          "method": "GET",
+          "host_glob": "api.github.com",
+          "path_glob": "/repos/**"
+        }
+      ]
+    }
+  }
+}

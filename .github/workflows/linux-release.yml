@@ -1,0 +1,107 @@
+name: Mercury Release
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  release-please:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    outputs:
+      release_created: ${{ steps.release.outputs.release_created }}
+      tag_name: ${{ steps.release.outputs.tag_name }}
+      sha: ${{ steps.release.outputs.sha }}
+
+    steps:
+      - name: Run release-please
+        id: release
+        uses: googleapis/release-please-action@v4
+        with:
+          config-file: .github/release-please-config.json
+          manifest-file: .github/.release-please-manifest.json
+
+  publish-linux-assets:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout release commit
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.release-please.outputs.sha }}
+
+      - name: Install Linux release dependencies
+        run: |
+          bash ./scripts/setup_ci_linux_build_deps.sh
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/linux-ui/package-lock.json
+
+      - name: Build Rust release binaries
+        run: cargo build --release --workspace
+
+      - name: Build Linux dashboard bundle
+        run: |
+          npm --prefix dashboard/linux-ui ci
+          npm --prefix dashboard/linux-ui run build
+
+      - name: Build Linux release payload
+        run: ./scripts/build_linux_release_bundle.sh dist/linux-release
+
+      - name: Render installer and sign release checksums
+        env:
+          LINUX_RELEASE_SIGNING_KEY_PEM: ${{ secrets.LINUX_RELEASE_SIGNING_KEY_PEM }}
+          RELEASE_TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          if [[ -z "${LINUX_RELEASE_SIGNING_KEY_PEM}" ]]; then
+            echo "error: missing LINUX_RELEASE_SIGNING_KEY_PEM secret" >&2
+            exit 1
+          fi
+
+          key_path="${RUNNER_TEMP}/linux-release-signing-key.pem"
+          pubkey_path="${RUNNER_TEMP}/linux-release-signing-key.pub.pem"
+          printf '%s\n' "${LINUX_RELEASE_SIGNING_KEY_PEM}" > "${key_path}"
+          chmod 0600 "${key_path}"
+          openssl pkey -in "${key_path}" -pubout -out "${pubkey_path}"
+
+          ./scripts/render_linux_installer.sh \
+            --output dist/linux-release/install-mercury-linux.sh \
+            --release-tag "${RELEASE_TAG}" \
+            --repository "${GITHUB_REPOSITORY}" \
+            --public-key-file "${pubkey_path}"
+
+          (
+            cd dist/linux-release
+            sha256sum install-mercury-linux.sh mercury-linux-x86_64.tar.gz > SHA256SUMS
+          )
+          openssl dgst -sha256 -sign "${key_path}" \
+            -out dist/linux-release/SHA256SUMS.sig \
+            dist/linux-release/SHA256SUMS
+
+      - name: Publish GitHub Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ needs.release-please.outputs.tag_name }}
+          files: |
+            dist/linux-release/install-mercury-linux.sh
+            dist/linux-release/mercury-linux-x86_64.tar.gz
+            dist/linux-release/SHA256SUMS
+            dist/linux-release/SHA256SUMS.sig

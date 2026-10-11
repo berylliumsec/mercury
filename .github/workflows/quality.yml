@@ -1,0 +1,180 @@
+name: Monorepo Quality
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "crates/**"
+      - "dashboard/linux-ui/**"
+      - "deploy/**"
+      - "samples/**"
+      - "scripts/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "CHANGELOG.md"
+      - "Makefile"
+      - ".github/.release-please-manifest.json"
+      - ".github/release-please-config.json"
+      - ".github/workflows/linux-release.yml"
+      - ".github/workflows/pr-title.yml"
+      - ".github/workflows/quality.yml"
+  pull_request:
+    paths:
+      - "crates/**"
+      - "dashboard/linux-ui/**"
+      - "deploy/**"
+      - "samples/**"
+      - "scripts/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - "CHANGELOG.md"
+      - "Makefile"
+      - ".github/.release-please-manifest.json"
+      - ".github/release-please-config.json"
+      - ".github/workflows/linux-release.yml"
+      - ".github/workflows/pr-title.yml"
+      - ".github/workflows/quality.yml"
+
+jobs:
+  rust-quality:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust workspace dependencies
+        run: |
+          bash ./scripts/setup_ci_linux_build_deps.sh
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust format check
+        run: cargo fmt --all -- --check
+
+      - name: Rust clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Rust tests
+        run: cargo test --workspace
+
+  dashboard-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/linux-ui/package-lock.json
+
+      - name: Install dashboard dependencies
+        working-directory: dashboard/linux-ui
+        run: npm ci
+
+      - name: Dashboard lint
+        working-directory: dashboard/linux-ui
+        run: npm run lint
+
+      - name: Dashboard typecheck
+        working-directory: dashboard/linux-ui
+        run: npm run typecheck
+
+      - name: Dashboard tests
+        working-directory: dashboard/linux-ui
+        run: npm run test
+
+      - name: Dashboard build
+        working-directory: dashboard/linux-ui
+        run: npm run build
+
+      - name: Dashboard prettier check
+        working-directory: dashboard/linux-ui
+        run: npm run format:check
+
+  linux-release-installer-smoke:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Linux release dependencies
+        run: |
+          bash ./scripts/setup_ci_linux_build_deps.sh
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: dashboard/linux-ui/package-lock.json
+
+      - name: Build Rust release binaries
+        run: cargo build --release --workspace
+
+      - name: Build Linux dashboard bundle
+        run: |
+          npm --prefix dashboard/linux-ui ci
+          npm --prefix dashboard/linux-ui run build
+
+      - name: Build Linux release payload
+        run: ./scripts/build_linux_release_bundle.sh dist/linux-release-smoke
+
+      - name: Render installer and sign smoke artifacts
+        run: |
+          key_path="${RUNNER_TEMP}/linux-release-smoke-key.pem"
+          pubkey_path="${RUNNER_TEMP}/linux-release-smoke-key.pub.pem"
+          openssl genpkey -algorithm RSA -pkeyopt rsa_keygen_bits:2048 -out "${key_path}"
+          openssl pkey -in "${key_path}" -pubout -out "${pubkey_path}"
+
+          ./scripts/render_linux_installer.sh \
+            --output dist/linux-release-smoke/install-mercury-linux.sh \
+            --release-tag "v0.0.0-smoke" \
+            --repository "local/mercury" \
+            --public-key-file "${pubkey_path}"
+
+          (
+            cd dist/linux-release-smoke
+            sha256sum install-mercury-linux.sh mercury-linux-x86_64.tar.gz > SHA256SUMS
+          )
+          openssl dgst -sha256 -sign "${key_path}" \
+            -out dist/linux-release-smoke/SHA256SUMS.sig \
+            dist/linux-release-smoke/SHA256SUMS
+
+      - name: Installer preflight smoke test
+        run: |
+          ./dist/linux-release-smoke/install-mercury-linux.sh \
+            --preflight-only \
+            --asset-base-url "file://${GITHUB_WORKSPACE}/dist/linux-release-smoke"
+
+      - name: Installer tamper detection
+        run: |
+          printf 'tamper\n' >> dist/linux-release-smoke/mercury-linux-x86_64.tar.gz
+          set +e
+          output=$(
+            ./dist/linux-release-smoke/install-mercury-linux.sh \
+              --preflight-only \
+              --asset-base-url "file://${GITHUB_WORKSPACE}/dist/linux-release-smoke" \
+              2>&1
+          )
+          status=$?
+          set -e
+
+          if [[ "${status}" -eq 0 ]]; then
+            echo "error: installer succeeded after archive tamper" >&2
+            exit 1
+          fi
+
+          printf '%s\n' "${output}" | grep -F "release archive checksum verification failed"

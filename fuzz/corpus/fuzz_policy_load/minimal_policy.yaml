@@ -1,0 +1,16 @@
+version: "1.0"
+defaults:
+  decision: deny
+  fail_mode: fail_closed
+profiles:
+  default:
+    file_allow:
+      - id: allow-tmp
+        pattern: "/tmp/**"
+    exec_allow:
+      - id: allow-bin
+        pattern: "/usr/bin/*"
+    network_deny:
+      - id: block-all
+        cidr: "0.0.0.0/0"
+        protocol: tcp

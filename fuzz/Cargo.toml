@@ -1,0 +1,25 @@
+[package]
+name = "mercury-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+arbitrary = { version = "1", features = ["derive"] }
+policy-engine = { path = "../crates/policy-engine" }
+
+[workspace]
+
+[[bin]]
+name = "fuzz_policy_load"
+path = "fuzz_targets/fuzz_policy_load.rs"
+doc = false
+
+[[bin]]
+name = "fuzz_policy_yaml_variants"
+path = "fuzz_targets/fuzz_policy_yaml_variants.rs"
+doc = false

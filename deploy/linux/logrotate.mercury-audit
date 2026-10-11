@@ -1,0 +1,29 @@
+# Mercury AI-Guard — audit log rotation
+#
+# This file is installed to /etc/logrotate.d/mercury-audit.
+# The daemon's SIGHUP handler reopens the audit log file descriptor, so we use
+# "postrotate / kill -HUP" rather than "copytruncate" to avoid the brief gap
+# that copytruncate introduces between truncation and the next write.
+#
+# Rotation policy:
+#   - Rotate when the log exceeds 20 MB  (matches daemon-internal rotation limit)
+#   - Keep 5 compressed rotated copies  (matches daemon-internal max_files)
+#   - Daily forced rotation as a backstop even if size limit not reached
+
+/var/log/mercury/audit.jsonl {
+    daily
+    size 20M
+    rotate 5
+    compress
+    delaycompress
+    missingok
+    notifempty
+    create 0640 root mercury
+    postrotate
+        # Signal the daemon to reopen its audit log file descriptor.
+        MAIN_PID=$(systemctl show -p MainPID --value mercuryd 2>/dev/null || true)
+        if [ -n "${MAIN_PID}" ] && [ "${MAIN_PID}" -gt 1 ] 2>/dev/null; then
+            kill -HUP "${MAIN_PID}" 2>/dev/null || true
+        fi
+    endscript
+}

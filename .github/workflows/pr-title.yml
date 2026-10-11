@@ -1,0 +1,26 @@
+name: PR Title
+
+on:
+  pull_request:
+    types: [opened, edited, synchronize, reopened]
+
+jobs:
+  conventional-title:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: Validate conventional PR title
+        env:
+          PR_TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          pattern='^(feat|fix|deps|refactor|docs|chore|ci|test|build)(\([^)]+\))?(!)?: .+$'
+          if [[ "${PR_TITLE}" =~ ${pattern} ]]; then
+            exit 0
+          fi
+
+          echo "error: PR title must use conventional commit style, for example:" >&2
+          echo "  feat: add mercury installer telemetry" >&2
+          echo "  fix(release): sign mercury Linux artifacts" >&2
+          echo "  feat!: rename AI Guard to Mercury" >&2
+          exit 1

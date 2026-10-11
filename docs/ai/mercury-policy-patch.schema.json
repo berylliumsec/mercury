@@ -1,0 +1,407 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://mercury.local/schemas/mercury-policy-patch.schema.json",
+  "title": "Mercury Policy Patch",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "needs_clarification",
+    "questions",
+    "assumptions",
+    "target_profile",
+    "policy_patch"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "mercury-policy-patch/v1"
+    },
+    "needs_clarification": {
+      "type": "boolean"
+    },
+    "questions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "maxItems": 5
+    },
+    "assumptions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "maxItems": 10
+    },
+    "target_profile": {
+      "type": "string",
+      "minLength": 1
+    },
+    "policy_patch": {
+      "$ref": "#/$defs/profilePatch"
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "needs_clarification": {
+            "const": true
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "questions": {
+            "minItems": 1
+          },
+          "policy_patch": {
+            "maxProperties": 0
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "questions": {
+            "maxItems": 0
+          },
+          "policy_patch": {
+            "minProperties": 1
+          }
+        }
+      }
+    }
+  ],
+  "$defs": {
+    "collectionAction": {
+      "type": "string",
+      "enum": [
+        "append",
+        "replace"
+      ]
+    },
+    "workspaceRootsPatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/collectionAction"
+        },
+        "items": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "pathRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pattern"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_ -]+$"
+        },
+        "pattern": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "execRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_ -]+$"
+        },
+        "path": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "networkRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_ -]+$"
+        },
+        "host_glob": {
+          "type": "string",
+          "minLength": 1
+        },
+        "cidr": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "protocol": {
+          "type": "string",
+          "enum": [
+            "tcp",
+            "udp"
+          ]
+        }
+      },
+      "anyOf": [
+        {
+          "required": [
+            "host_glob"
+          ]
+        },
+        {
+          "required": [
+            "cidr"
+          ]
+        }
+      ]
+    },
+    "urlRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "host_glob",
+        "path_glob"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_ -]+$"
+        },
+        "scheme": {
+          "type": "string",
+          "enum": [
+            "http",
+            "https",
+            "*"
+          ]
+        },
+        "host_glob": {
+          "type": "string",
+          "minLength": 1
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "method": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]+$"
+        },
+        "path_glob": {
+          "type": "string",
+          "minLength": 1
+        },
+        "query_glob": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "rulePatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "items"
+      ],
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/collectionAction"
+        },
+        "items": {
+          "type": "array"
+        }
+      }
+    },
+    "enforcement": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "properties": {
+        "file": {
+          "type": "string",
+          "enum": [
+            "observe",
+            "enforce"
+          ]
+        },
+        "process": {
+          "type": "string",
+          "enum": [
+            "observe",
+            "enforce"
+          ]
+        },
+        "network": {
+          "type": "string",
+          "enum": [
+            "observe",
+            "enforce"
+          ]
+        }
+      }
+    },
+    "profilePatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "workspace_roots": {
+          "$ref": "#/$defs/workspaceRootsPatch"
+        },
+        "file_allow": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/rulePatch"
+            },
+            {
+              "properties": {
+                "items": {
+                  "items": {
+                    "$ref": "#/$defs/pathRule"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "file_deny": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/rulePatch"
+            },
+            {
+              "properties": {
+                "items": {
+                  "items": {
+                    "$ref": "#/$defs/pathRule"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "exec_allow": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/rulePatch"
+            },
+            {
+              "properties": {
+                "items": {
+                  "items": {
+                    "$ref": "#/$defs/execRule"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "exec_deny": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/rulePatch"
+            },
+            {
+              "properties": {
+                "items": {
+                  "items": {
+                    "$ref": "#/$defs/execRule"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "network_allow": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/rulePatch"
+            },
+            {
+              "properties": {
+                "items": {
+                  "items": {
+                    "$ref": "#/$defs/networkRule"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "network_deny": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/rulePatch"
+            },
+            {
+              "properties": {
+                "items": {
+                  "items": {
+                    "$ref": "#/$defs/networkRule"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "url_allow": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/rulePatch"
+            },
+            {
+              "properties": {
+                "items": {
+                  "items": {
+                    "$ref": "#/$defs/urlRule"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "url_deny": {
+          "allOf": [
+            {
+              "$ref": "#/$defs/rulePatch"
+            },
+            {
+              "properties": {
+                "items": {
+                  "items": {
+                    "$ref": "#/$defs/urlRule"
+                  }
+                }
+              }
+            }
+          ]
+        },
+        "enforcement": {
+          "$ref": "#/$defs/enforcement"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,18 @@
+version: v1
+defaults:
+  decision: allow
+  fail_mode: fail_closed
+  audit_level: all
+  enforcement:
+    file: enforce
+    process: enforce
+    network: enforce
+profiles:
+  default:
+    file_deny:
+      - id: file_deny_1
+        pattern: /workspace/private/history.txt
+signature:
+  key_id: local-dev
+  alg: ed25519
+  sig: ""

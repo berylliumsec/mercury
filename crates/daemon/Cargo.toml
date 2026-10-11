@@ -1,0 +1,65 @@
+[package]
+name = "daemon"
+version = "0.2.0"
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["linux"]
+linux = ["linux-adapter", "libc"]
+
+[dependencies]
+anyhow.workspace = true
+argon2.workspace = true
+audit = { path = "../audit" }
+axum.workspace = true
+axum-server = { version = "0.7", features = ["tls-rustls"] }
+base64.workspace = true
+chrono.workspace = true
+clap.workspace = true
+control-api = { path = "../control-api" }
+core-types = { path = "../core-types" }
+futures-util.workspace = true
+http = "1.3"
+http-body-util = "0.1"
+hyper = { version = "1.6", features = ["http1", "server"] }
+hyper-util = { version = "0.1", features = ["tokio", "server", "http1"] }
+hex.workspace = true
+globset.workspace = true
+httparse = "1.10"
+hmac.workspace = true
+kernel-runtime = { path = "../kernel-runtime" }
+libc = { workspace = true, optional = true }
+linux-adapter = { path = "../linux-adapter", optional = true }
+parking_lot.workspace = true
+platform-traits = { path = "../platform-traits" }
+policy-engine = { path = "../policy-engine" }
+rand.workspace = true
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+subtle.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tokio-stream.workspace = true
+tower.workspace = true
+tower-http.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+rcgen = { version = "0.13", features = ["x509-parser"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2"] }
+rustls = "0.23"
+rustls-pemfile = "2"
+tokio-rustls = "0.26"
+webpki-roots = "1"
+x509-parser = "0.16"
+uuid.workspace = true
+
+[[bin]]
+name = "mercuryd"
+path = "src/bin/mercuryd.rs"
+
+[dev-dependencies]
+tempfile = "3.14"

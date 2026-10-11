@@ -1,0 +1,15 @@
+[package]
+name = "mercury-policy-patch"
+version = "0.2.0"
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+core-types = { path = "../../crates/core-types" }
+ipnet.workspace = true
+policy-engine = { path = "../../crates/policy-engine" }
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true

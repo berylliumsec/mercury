@@ -1,0 +1,50 @@
+[package]
+name = "cli"
+version = "0.2.0"
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["linux"]
+linux = ["linux-adapter", "libc"]
+
+[dependencies]
+anyhow.workspace = true
+argon2.workspace = true
+audit = { path = "../audit" }
+base64.workspace = true
+chrono.workspace = true
+clap.workspace = true
+control-api = { path = "../control-api" }
+core-types = { path = "../core-types" }
+hex.workspace = true
+hmac.workspace = true
+linux-adapter = { path = "../linux-adapter", optional = true }
+rand.workspace = true
+libc = { workspace = true, optional = true }
+platform-traits = { path = "../platform-traits" }
+policy-engine = { path = "../policy-engine" }
+serde.workspace = true
+serde_json.workspace = true
+serde_yaml.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+
+[lib]
+name = "cli"
+path = "src/lib.rs"
+
+[[bin]]
+name = "mercury-policy"
+path = "src/bin/mercury-policy.rs"
+
+[[bin]]
+name = "mercury-status"
+path = "src/bin/mercury-status.rs"
+
+[[bin]]
+name = "mercury-audit"
+path = "src/bin/mercury-audit.rs"
+
+[dev-dependencies]
+tempfile = "3.14"

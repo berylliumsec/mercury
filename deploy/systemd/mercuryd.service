@@ -1,0 +1,36 @@
+[Unit]
+Description=Mercury Runtime Security Daemon
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mercuryd --config /etc/mercury/config.yaml
+Restart=on-failure
+RestartSec=3
+User=root
+Group=mercury
+RuntimeDirectory=mercury
+RuntimeDirectoryMode=0770
+UMask=0007
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectControlGroups=false
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+Delegate=yes
+ReadWritePaths=/run/mercury /var/log/mercury /var/lib/mercury /etc/mercury /sys/fs/cgroup /sys/fs/bpf /sys/kernel/security/apparmor/
+CapabilityBoundingSet=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN CAP_DAC_READ_SEARCH CAP_MAC_ADMIN
+AmbientCapabilities=CAP_BPF CAP_PERFMON CAP_SYS_ADMIN CAP_DAC_READ_SEARCH CAP_MAC_ADMIN
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+SystemCallFilter=@system-service @network-io @file-system bpf perf_event_open
+SystemCallFilter=~@reboot @swap @obsolete
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

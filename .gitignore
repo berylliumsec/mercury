@@ -1,0 +1,75 @@
+# Rust build outputs
+target/
+# Keep lockfiles committed for reproducible Rust builds.
+!/Cargo.lock
+
+# Swift/SwiftPM build outputs
+.build/
+.swiftpm/
+# Keep dependency resolution committed.
+!/macos/Package.resolved
+
+# Xcode user-specific and generated artifacts
+DerivedData/
+*.xcuserstate
+*.xcuserdatad/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.xcodeproj/project.xcworkspace/xcuserdata/
+
+# Frontend build/dependency artifacts
+dashboard/linux-ui/node_modules/
+dashboard/linux-ui/dist/
+dist/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python environments and caches
+.venv/
+.venv-*/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# Logs and local runtime artifacts
+*.log
+*.tmp
+mercury-linux-release-signing-key*.pem
+/.tmp-*/
+.remotion/
+docs/demo/
+images/demo/
+tmp-demo-review*/
+tmp-demo-review*.js
+tmp-demo-review.html
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+.npmrc
+.pypirc
+.netrc
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Generated browser test reports
+**/playwright-report/
+**/test-results/

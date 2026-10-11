@@ -1,0 +1,332 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+readonly RELEASE_TAG="__RELEASE_TAG__"
+readonly RELEASE_REPOSITORY="__RELEASE_REPOSITORY__"
+readonly SIGNING_PUBLIC_KEY_B64="__SIGNING_PUBLIC_KEY_B64__"
+readonly ARCHIVE_NAME="mercury-linux-x86_64.tar.gz"
+readonly CHECKSUM_NAME="SHA256SUMS"
+readonly SIGNATURE_NAME="SHA256SUMS.sig"
+readonly INSTALLED_HELPER_PATH="/usr/local/lib/mercury/install_linux_common.sh"
+
+ASSET_BASE_URL=""
+FORCE_INSTALL=0
+PREFLIGHT_ONLY=0
+UNINSTALL_ONLY=0
+PURGE_UNINSTALL=0
+
+usage() {
+  cat <<'EOF'
+usage: install-mercury-linux.sh [--preflight-only] [--force] [--uninstall] [--purge]
+                                [--asset-base-url <url>] [--acme-domain <domain>] [--acme-email <email>]
+                                [--tls-cert-file <path> --tls-key-file <path>] [--no-tls]
+                                [--dashboard-bind-addr <addr>] [--dashboard-expose]
+                                [--dashboard-allow-self-signed]
+
+Downloads a signed Mercury Linux release payload, verifies it, runs preflight checks,
+and installs the system service.
+
+Uninstall mode removes the Mercury service, binaries, and dashboard assets without downloading
+release assets. Add --purge to also remove /etc/mercury, /var/lib/mercury, and /var/log/mercury.
+
+Dashboard bind options:
+  --dashboard-bind-addr <addr>  Set dashboard.bind_addr explicitly, e.g. 127.0.0.1:7480
+  --dashboard-expose            Convenience flag for --dashboard-bind-addr 0.0.0.0:7480
+  --dashboard-allow-self-signed Allow exposed dashboard binds to use Mercury-managed self-signed TLS
+EOF
+}
+
+log() {
+  printf '%s\n' "$*"
+}
+
+die() {
+  printf 'error: %s\n' "$*" >&2
+  exit 1
+}
+
+remove_empty_dir() {
+  local path="$1"
+
+  if [[ -d "$path" ]]; then
+    rmdir "$path" 2>/dev/null || true
+  fi
+}
+
+need_cmd() {
+  if ! command -v "$1" >/dev/null 2>&1; then
+    die "required command not found: $1"
+  fi
+}
+
+download_asset() {
+  local asset_name="$1"
+  local destination="$2"
+  local url="${ASSET_BASE_URL%/}/${asset_name}"
+
+  log "downloading ${asset_name}"
+  curl -fsSL --retry 3 --retry-all-errors "$url" -o "$destination"
+}
+
+verify_signature() {
+  local checksums_path="$1"
+  local signature_path="$2"
+  local public_key_path="$3"
+
+  printf '%s' "$SIGNING_PUBLIC_KEY_B64" | base64 -d > "$public_key_path"
+  openssl dgst -sha256 -verify "$public_key_path" -signature "$signature_path" "$checksums_path" \
+    >/dev/null
+}
+
+verify_archive_checksum() {
+  local checksums_path="$1"
+  local archive_path="$2"
+  local archive_name
+  archive_name="$(basename "$archive_path")"
+
+  local checksum_line
+  checksum_line="$(grep "  ${archive_name}\$" "$checksums_path" || true)"
+  [[ -n "$checksum_line" ]] || die "checksum entry missing for ${archive_name}"
+  printf '%s\n' "$checksum_line" | (cd "$(dirname "$archive_path")" && sha256sum -c - >/dev/null)
+}
+
+run_preflight() {
+  local payload_root="$1"
+  local status=0
+
+  set +e
+  "$payload_root/bin/mercury-status" preflight
+  status=$?
+  set -e
+
+  return "$status"
+}
+
+require_root_for_install() {
+  if [[ "${EUID}" -ne 0 ]]; then
+    die "run as root to install (use: sudo ./install-mercury-linux.sh)"
+  fi
+}
+
+require_root_for_uninstall() {
+  if [[ "${EUID}" -ne 0 ]]; then
+    die "run as root to uninstall (use: sudo ./install-mercury-linux.sh --uninstall)"
+  fi
+}
+
+fallback_uninstall() {
+  local purge="$1"
+  local binary=""
+  local path=""
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl disable --now mercuryd >/dev/null 2>&1 || true
+    systemctl reset-failed mercuryd >/dev/null 2>&1 || true
+  fi
+
+  rm -f /etc/systemd/system/mercuryd.service
+  rm -f /etc/tmpfiles.d/mercuryd.tmpfiles.conf
+
+  if command -v systemctl >/dev/null 2>&1; then
+    systemctl daemon-reload >/dev/null 2>&1 || true
+  fi
+
+  for binary in mercuryd mercury-run mercury-policy mercury-status mercury-audit; do
+    rm -f "/usr/local/bin/${binary}"
+  done
+
+  rm -rf /usr/share/mercury/dashboard
+  rm -rf /run/mercury
+  rm -f "$INSTALLED_HELPER_PATH"
+
+  remove_empty_dir /usr/share/mercury
+  remove_empty_dir /usr/local/lib/mercury
+
+  for path in /sys/fs/cgroup/mercury/agents/*; do
+    if [[ -d "$path" ]]; then
+      rmdir "$path" 2>/dev/null || true
+    fi
+  done
+  remove_empty_dir /sys/fs/cgroup/mercury/agents
+  remove_empty_dir /sys/fs/cgroup/mercury
+
+  if [[ "$purge" -eq 1 ]]; then
+    rm -rf /etc/mercury /var/lib/mercury /var/log/mercury
+    log "purged Mercury config and runtime data"
+  else
+    log "preserved /etc/mercury, /var/lib/mercury, and /var/log/mercury"
+  fi
+
+  log "Mercury uninstall complete"
+  log "note: the 'mercury' group was left in place"
+}
+
+default_asset_base_url() {
+  printf 'https://github.com/%s/releases/download/%s' "$RELEASE_REPOSITORY" "$RELEASE_TAG"
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --preflight-only)
+      PREFLIGHT_ONLY=1
+      shift
+      ;;
+    --force)
+      FORCE_INSTALL=1
+      shift
+      ;;
+    --uninstall)
+      UNINSTALL_ONLY=1
+      shift
+      ;;
+    --purge)
+      PURGE_UNINSTALL=1
+      shift
+      ;;
+    --asset-base-url)
+      ASSET_BASE_URL="$2"
+      shift 2
+      ;;
+    --acme-domain)
+      MERCURY_ACME_DOMAIN="$2"
+      shift 2
+      ;;
+    --acme-domain=*)
+      MERCURY_ACME_DOMAIN="${1#*=}"
+      shift
+      ;;
+    --acme-email)
+      MERCURY_ACME_EMAIL="$2"
+      shift 2
+      ;;
+    --acme-email=*)
+      MERCURY_ACME_EMAIL="${1#*=}"
+      shift
+      ;;
+    --tls-cert-file)
+      MERCURY_TLS_CERT_FILE="$2"
+      shift 2
+      ;;
+    --tls-cert-file=*)
+      MERCURY_TLS_CERT_FILE="${1#*=}"
+      shift
+      ;;
+    --tls-key-file)
+      MERCURY_TLS_KEY_FILE="$2"
+      shift 2
+      ;;
+    --tls-key-file=*)
+      MERCURY_TLS_KEY_FILE="${1#*=}"
+      shift
+      ;;
+    --no-tls)
+      MERCURY_NO_TLS=1
+      shift
+      ;;
+    --dashboard-bind-addr)
+      MERCURY_DASHBOARD_BIND_ADDR="$2"
+      shift 2
+      ;;
+    --dashboard-bind-addr=*)
+      MERCURY_DASHBOARD_BIND_ADDR="${1#*=}"
+      shift
+      ;;
+    --dashboard-expose)
+      MERCURY_DASHBOARD_BIND_ADDR="0.0.0.0:7480"
+      shift
+      ;;
+    --dashboard-allow-self-signed)
+      MERCURY_ALLOW_SELF_SIGNED_DASHBOARD_EXPOSURE=1
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    *)
+      die "unknown argument: $1"
+      ;;
+  esac
+done
+
+# Export TLS env vars so install_linux_common.sh can read them
+export MERCURY_ACME_DOMAIN="${MERCURY_ACME_DOMAIN:-}"
+export MERCURY_ACME_EMAIL="${MERCURY_ACME_EMAIL:-}"
+export MERCURY_TLS_CERT_FILE="${MERCURY_TLS_CERT_FILE:-}"
+export MERCURY_TLS_KEY_FILE="${MERCURY_TLS_KEY_FILE:-}"
+export MERCURY_NO_TLS="${MERCURY_NO_TLS:-0}"
+export MERCURY_DASHBOARD_BIND_ADDR="${MERCURY_DASHBOARD_BIND_ADDR:-}"
+export MERCURY_ALLOW_SELF_SIGNED_DASHBOARD_EXPOSURE="${MERCURY_ALLOW_SELF_SIGNED_DASHBOARD_EXPOSURE:-0}"
+
+if [[ "$UNINSTALL_ONLY" -eq 1 && "$PREFLIGHT_ONLY" -eq 1 ]]; then
+  die "--uninstall and --preflight-only cannot be used together"
+fi
+
+if [[ "$PURGE_UNINSTALL" -eq 1 && "$UNINSTALL_ONLY" -ne 1 ]]; then
+  die "--purge is only valid together with --uninstall"
+fi
+
+if [[ "$UNINSTALL_ONLY" -eq 1 ]]; then
+  require_root_for_uninstall
+
+  if [[ -f "$INSTALLED_HELPER_PATH" ]]; then
+    # shellcheck disable=SC1091
+    source "$INSTALLED_HELPER_PATH"
+    mercury_uninstall_system "$PURGE_UNINSTALL"
+    exit 0
+  fi
+
+  fallback_uninstall "$PURGE_UNINSTALL"
+  exit 0
+fi
+
+ASSET_BASE_URL="${ASSET_BASE_URL:-$(default_asset_base_url)}"
+
+need_cmd curl
+need_cmd openssl
+need_cmd sha256sum
+need_cmd tar
+need_cmd base64
+
+WORK_DIR="$(mktemp -d)"
+trap 'rm -rf "$WORK_DIR"' EXIT
+
+CHECKSUM_PATH="$WORK_DIR/$CHECKSUM_NAME"
+SIGNATURE_PATH="$WORK_DIR/$SIGNATURE_NAME"
+ARCHIVE_PATH="$WORK_DIR/$ARCHIVE_NAME"
+PUBLIC_KEY_PATH="$WORK_DIR/linux-release-signing-key.pem"
+
+download_asset "$CHECKSUM_NAME" "$CHECKSUM_PATH"
+download_asset "$SIGNATURE_NAME" "$SIGNATURE_PATH"
+download_asset "$ARCHIVE_NAME" "$ARCHIVE_PATH"
+
+verify_signature "$CHECKSUM_PATH" "$SIGNATURE_PATH" "$PUBLIC_KEY_PATH" \
+  || die "release checksum signature verification failed"
+verify_archive_checksum "$CHECKSUM_PATH" "$ARCHIVE_PATH" \
+  || die "release archive checksum verification failed"
+
+tar -xzf "$ARCHIVE_PATH" -C "$WORK_DIR"
+PAYLOAD_ROOT="$WORK_DIR/mercury-linux-x86_64"
+[[ -d "$PAYLOAD_ROOT" ]] || die "payload archive missing mercury-linux-x86_64 root directory"
+[[ -x "$PAYLOAD_ROOT/bin/mercury-status" ]] || die "payload archive missing mercury-status binary"
+[[ -f "$PAYLOAD_ROOT/lib/install_linux_common.sh" ]] || die "payload archive missing install helpers"
+
+if ! run_preflight "$PAYLOAD_ROOT"; then
+  if [[ "$PREFLIGHT_ONLY" -eq 1 ]]; then
+    exit 1
+  fi
+
+  if [[ "$FORCE_INSTALL" -ne 1 ]]; then
+    die "preflight failed; rerun with --force to continue anyway"
+  fi
+
+  log "preflight failed; continuing because --force was provided"
+fi
+
+if [[ "$PREFLIGHT_ONLY" -eq 1 ]]; then
+  exit 0
+fi
+
+require_root_for_install
+source "$PAYLOAD_ROOT/lib/install_linux_common.sh"
+mercury_install_payload_root "$PAYLOAD_ROOT"

@@ -1,0 +1,26 @@
+[package]
+name = "launcher"
+version = "0.2.0"
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = ["unix-ipc"]
+unix-ipc = ["libc"]
+
+[dependencies]
+anyhow.workspace = true
+clap.workspace = true
+control-api = { path = "../control-api" }
+libc = { workspace = true, optional = true }
+platform-traits = { path = "../platform-traits" }
+serde_json.workspace = true
+sha2.workspace = true
+tokio.workspace = true
+
+[[bin]]
+name = "mercury-run"
+path = "src/main.rs"
+
+[dev-dependencies]
+tempfile = "3.14"

@@ -1,0 +1,48 @@
+version: v1
+# Sign this policy before first use when signature_verification=require_valid.
+# The installers do this automatically with mercury-policy sign.
+defaults:
+  decision: deny
+  fail_mode: fail_closed
+  audit_level: all
+  enforcement:
+    file: enforce
+    process: enforce
+    network: enforce
+profiles:
+  default:
+    workspace_roots:
+      - /workspace
+    file_allow:
+      - id: allow_workspace
+        pattern: /workspace/**
+    file_deny:
+      - id: deny_workspace_secrets
+        pattern: /workspace/secrets/**
+      - id: deny_host_sensitive
+        pattern: /etc/**
+    exec_allow:
+      - id: allow_shell_tools
+        path: /usr/bin/*
+      - id: allow_bin_tools
+        path: /bin/*
+      # Add agent-specific executable paths for your host as needed.
+    exec_deny:
+      - id: deny_rm
+        path: /bin/rm
+      - id: deny_sudo
+        path: /usr/bin/sudo
+    network_allow:
+      - id: allow_localhost
+        cidr: 127.0.0.1/32
+        protocol: TCP
+      - id: allow_internal_vpn
+        cidr: 10.0.0.0/8
+        protocol: TCP
+    network_deny:
+      - id: deny_metadata
+        cidr: 169.254.169.254/32
+        protocol: TCP
+      - id: deny_external
+        cidr: 0.0.0.0/0
+        protocol: TCP

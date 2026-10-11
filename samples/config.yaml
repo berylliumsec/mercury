@@ -1,0 +1,79 @@
+socket_path: /run/mercury/mercuryd.sock
+policy_path: /etc/mercury/policy.yaml
+audit_jsonl_path: /var/log/mercury/audit.jsonl
+log_level: info
+mirror_to_journald: true
+journald_mirror_mode: native # native | syslog (pre-v2: journald's syslog forwarding socket)
+audit_integrity: true # chained HMAC over every audit record; false opts out
+# audit_integrity_key_path: /var/lib/mercury/audit-integrity.key # default, generated (0600) on first start; also env:VAR | creds:NAME | literal:HEX
+audit_fsync: interval # none | interval | always
+audit_max_file_bytes: 104857600 # rotate at 100 MiB
+audit_max_files: 10 # rotated files kept besides audit.jsonl
+signature_verification: require_valid
+signature_key_path: /etc/mercury/policy-signing-key
+policy_unavailable_mode: fail_closed
+backend_mode: kernel_strict
+filesystem_backend: apparmor
+cgroup_base: /sys/fs/cgroup/mercury/agents
+kernel:
+  bpffs_path: /sys/fs/bpf
+  cgroup_root: /sys/fs/cgroup
+  event_buffer_pages: 256
+  url_proxy_port: 19080
+  # Auto-enrollment is only supported with filesystem_backend: ebpf_lsm.
+  auto_enroll_rules: []
+  unmatched_host_mode: observe
+apparmor:
+  parser_path: /usr/sbin/apparmor_parser
+  generated_policy_dir: /var/lib/mercury/apparmor
+  audit_source: journald
+url_gateway:
+  enabled: true
+  required: true
+  bind_addr: 127.0.0.1:19080
+  no_proxy: localhost,127.0.0.1,::1
+  tls_intercept_enabled: true
+  ca_cert_file: /etc/mercury/url-gateway-ca.crt
+  ca_key_file: /etc/mercury/url-gateway-ca.key
+  auto_generate_ca: true
+  connect_timeout_ms: 10000
+  request_timeout_ms: 30000 # time to response headers (non-model hosts)
+  body_idle_timeout_ms: 300000 # longest pause between response chunks; bodies stream
+  model_traffic:
+    # hosts: [...] # defaults cover OpenAI, ChatGPT, Anthropic, OpenRouter, Gemini, Vertex, Bedrock, xAI, Mistral, Groq, DeepSeek, Together, Fireworks
+    request_timeout_ms: 600000 # model APIs may only send headers after generation
+    capture: "off" # off | metadata | content
+    max_capture_bytes: 4194304
+    max_text_chars: 16384
+    max_messages: 50
+dashboard:
+  enabled: true
+  required: false
+  bind_addr: 127.0.0.1:7480 # Set to 0.0.0.0:7480 or a specific interface to expose remotely.
+  static_dir: /usr/share/mercury/dashboard
+  sqlite_path: /var/lib/mercury/dashboard.db
+  retention_days: 14
+  sse_clients_max: 200
+  request_rate_limit_rps: 50
+  auth:
+    username: admin
+    password_file: /etc/mercury/dashboard.password
+    session_ttl_minutes: 30
+  launch:
+    user: "" # Set this to a non-root Linux username before using the Agents tab.
+    launcher_path: /usr/local/bin/mercury-run
+    history_limit: 25
+  tls:
+    enabled: true
+    cert_file: /etc/mercury/dashboard.crt
+    key_file: /etc/mercury/dashboard.key
+    auto_generate_self_signed: true
+# Live enrollments are persisted here so a restarted daemon can re-enroll
+# surviving agents (the eBPF maps do not outlive mercuryd).
+enrollment_state_path: /var/lib/mercury/enrollments.json
+# Optional webhook alerting for denies, telemetry loss and tamper-relevant events.
+alerts:
+  # webhook_url: https://alerts.example.internal/mercury
+  min_severity: deny # deny | system | all
+  rate_limit_per_minute: 60
+  include_resource: true
